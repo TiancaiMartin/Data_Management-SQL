@@ -1,0 +1,210 @@
+﻿--1.创建part表
+CREATE TABLE part (
+  p_partkey     	integer     	NOT NULL,
+  p_name        	varchar(22) 	NOT NULL,
+  p_mfgr        	varchar(6)    NOT NULL,
+  p_category    	varchar(7)    NOT NULL,
+  p_brand1      	varchar(9)    NOT NULL,
+  p_color       	varchar(11) 	NOT NULL,
+  p_type        	varchar(25) 	NOT NULL,
+  p_size        	integer     	NOT NULL,
+  p_container   	varchar(10)   NOT NULL,
+PRIMARY KEY (p_partkey)
+);
+--2.创建supplier表
+CREATE TABLE supplier (
+  s_suppkey     	integer     	NOT NULL,
+  s_name        	varchar(25)   NOT NULL,
+  s_address     	varchar(25) 	NOT NULL,
+  s_city        	varchar(10)   NOT NULL,
+  s_nation      	varchar(15)   NOT NULL,
+  s_region      	varchar(12)   NOT NULL,
+  s_phone       	varchar(15)   NOT NULL,
+PRIMARY KEY (s_suppkey)
+);
+--3.创建customer表
+CREATE TABLE customer (
+  c_custkey     	integer     	NOT NULL,
+  c_name        	varchar(25) 	NOT NULL,
+  c_address     	varchar(25) 	NOT NULL,
+  c_city        	varchar(10)   NOT NULL,
+  c_nation      	varchar(15)   NOT NULL,
+  c_region      	varchar(12)   NOT NULL,
+  c_phone       	varchar(15)   NOT NULL,
+  c_mktsegment  varchar(10) 	NOT NULL,
+PRIMARY KEY (c_custkey)
+);
+--4.创建date表
+CREATE TABLE date (
+  d_datekey     		integer     	NOT NULL,
+  d_date           	varchar(19)   NOT NULL,
+  d_dayofweek		    varchar(10)   NOT NULL,
+  d_month      		varchar(10)   NOT NULL,
+  d_year           	integer     	NOT NULL,
+  d_yearmonthnum 	integer  	    NOT NULL,
+  d_yearmonth        varchar(8)     NOT NULL,
+  d_daynuminweek     integer     	NOT NULL,
+  d_daynuminmonth  	integer     	NOT NULL,
+  d_daynuminyear      integer     	NOT NULL,
+  d_monthnuminyear 	integer     	NOT NULL,
+  d_weeknuminyear   	integer     	NOT NULL,
+  d_sellingseason    	varchar(13)   NOT NULL,
+  d_lastdayinweekfl  	varchar(1)    NOT NULL,
+  d_lastdayinmonthfl  	varchar(1)    NOT NULL,
+  d_holidayfl          varchar(1)    NOT NULL,
+  d_weekdayfl         varchar(1)    NOT NULL,
+PRIMARY KEY (d_datekey)
+);
+--5.创建lineorder表
+CREATE TABLE lineorder (
+  lo_orderkey      	integer     	NOT NULL,
+  lo_linenumber 	    integer     	NOT NULL,
+  lo_custkey           integer     	NOT NULL,
+  lo_partkey           integer     	NOT NULL,
+  lo_suppkey          integer     	NOT NULL,
+  lo_orderdate         	integer     	NOT NULL,
+  lo_orderpriority     	varchar(15)   NOT NULL,
+  lo_shippriority      	varchar(1)    NOT NULL,
+  lo_quantity          	integer     	NOT NULL,
+  lo_extendedprice     	integer     	NOT NULL,
+  lo_ordertotalprice   	integer     	NOT NULL,
+  lo_discount          integer     	NOT NULL,
+  lo_revenue          integer     	NOT NULL,
+  lo_supplycost        	integer     	NOT NULL,
+  lo_tax              integer     	NOT NULL,
+  lo_commitdate       integer     	NOT NULL,
+  lo_shipmode         varchar(10)   	NOT NULL,
+PRIMARY KEY (lo_orderkey,lo_linenumber)
+);
+
+ALTER TABLE lineorder ADD CONSTRAINT FK_lineorder_customer FOREIGN KEY (lo_custkey) REFERENCES customer(c_custkey);
+ALTER TABLE lineorder ADD CONSTRAINT FK_lineorder_part FOREIGN KEY (lo_partkey) REFERENCES part(p_partkey);
+ALTER TABLE lineorder ADD CONSTRAINT FK_lineorder_supplier FOREIGN KEY (lo_suppkey) REFERENCES supplier(s_suppkey);
+ALTER TABLE lineorder ADD CONSTRAINT FK_lineorder_date FOREIGN KEY(lo_orderdate) REFERENCES date(d_datekey);
+
+MonetDB windows版数据导入：
+copy into part from 'D:\Software\SSB_1G\part.tbl' USING DELIMITERS '|';
+copy into supplier from 'D:\Software\SSB_1G\supplier.tbl' USING DELIMITERS '|';  
+copy into customer from 'D:\Software\SSB_1G\customer.tbl' USING DELIMITERS '|';  
+copy into date from 'D:\Software\SSB_1G\date.tbl' USING DELIMITERS '|';  
+copy into lineorder from 'D:\Software\SSB_1G\lineorder.tbl' USING DELIMITERS '|';  
+
+
+
+--FoodMart表约束条件
+alter table customer add primary key(customer_id);
+alter table promotion add primary key(promotion_id);
+alter table time_by_day add primary key(time_id);
+alter table store add primary key(store_id);
+alter table region add primary key(region_id);
+alter table store add constraint FK_region foreign key(region_id) references region(region_id);
+alter table product add primary key(product_id);
+alter table product_class add primary key(product_class_id);
+alter table product add constraint FK_product_class foreign key(product_class_id) references product_class(product_class_id);
+alter table sales_fact add constraint FK_product foreign key(product_id) references product(product_id);
+alter table sales_fact add constraint FK_time foreign key(time_id) references time_by_day(time_id);
+alter table sales_fact add constraint FK_customer foreign key(customer_id) references customer(customer_id);
+alter table sales_fact add constraint FK_promotion foreign key(promotion_id) references promotion(promotion_id);
+alter table sales_fact add constraint FK_store foreign key(store_id) references store(store_id);
+
+--TPC-H建表命令
+CREATE TABLE PART
+(
+P_PARTKEY  integer,
+P_NAME  varchar(55), 
+P_MFGR  char(25),
+P_BRAND  char(10),	
+P_TYPE  varchar(25), 
+P_SIZE  integer, 
+P_CONTAINER  char(10), 
+P_RETAILPRICE  decimal,
+P_COMMENT  varchar(23)   
+);
+
+CREATE TABLE SUPPLIER
+(
+S_SUPPKEY   integer,
+S_NAME  char(25), 
+S_ADDRESS  varchar(40), 
+S_NATIONKEY  integer,
+S_PHONE  char(15), 
+S_ACCTBAL  decimal,
+S_COMMENT  varchar(101)
+); 
+
+
+CREATE TABLE PARTSUPP
+(
+PS_PARTKEY  integer,
+PS_SUPPKEY  integer,
+PS_AVAILQTY  integer, 
+PS_SUPPLYCOST  Decimal,
+PS_COMMENT  varchar(199)
+); 
+
+
+CREATE TABLE CUSTOMER
+(
+C_CUSTKEY  integer,
+C_NAME  varchar(25), 
+C_ADDRESS  varchar(40), 
+C_NATIONKEY  integer,
+C_PHONE  char(15), 
+C_ACCTBAL  Decimal,
+C_MKTSEGMENT  char(10), 
+C_COMMENT  varchar(117) 
+);
+
+
+CREATE TABLE ORDERS
+(
+O_ORDERKEY  integer,
+O_CUSTKEY  integer,
+O_ORDERSTATUS  char(1), 
+O_TOTALPRICE  Decimal, 
+O_ORDERDATE  Date, 
+O_ORDERPRIORITY char(15), 
+O_CLERK  char(15), 
+O_SHIPPRIORITY  Integer,
+O_COMMENT  varchar(79)
+);
+
+
+CREATE TABLE LINEITEM
+(
+L_ORDERKEY  integer,
+L_PARTKEY integer,
+L_SUPPKEY  integer, 
+L_LINENUMBER  integer,
+L_QUANTITY  decimal,
+L_EXTENDEDPRICE  decimal, 
+L_DISCOUNT  decimal, 
+L_TAX  decimal, 
+L_RETURNFLAG  char(1), 
+L_LINESTATUS  char(1), 
+L_SHIPDATE  date, 
+L_COMMITDATE  date, 
+L_RECEIPTDATE  date, 
+L_SHIPINSTRUCT  char(25), 
+L_SHIPMODE  char(10), 
+L_COMMENT  varchar(44)
+);
+
+
+CREATE TABLE NATION
+(
+N_NATIONKEY integer,
+N_NAME  char(25), 
+N_REGIONKEY  integer,
+N_COMMENT  varchar(152)
+);
+
+
+CREATE TABLE REGION
+(
+R_REGIONKEY integer,
+R_NAME  char(25), 
+R_COMMENT  varchar(152)
+);   
+
+

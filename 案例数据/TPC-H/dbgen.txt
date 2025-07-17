@@ -1,0 +1,231 @@
+dbgen -s 1 -T n
+dbgen -s 1 -T r
+dbgen -s 1 -T P
+dbgen -s 1 -T s
+dbgen -s 1 -T c
+dbgen -s 1 -T S
+dbgen -s 1 -T O
+dbgen -s 1 -T L
+
+SQL server2008R2修改SQL
+
+
+--Q1:
+--6 years:1992-01-02--1998-12-01,查询选择率5914748/6001215=99%
+--CPU端并行执行where子句，投影出l_quantity，l_extendedprice， l_discount，l_tax，复合l_returnflag+l_linestatus
+--CPU端投影为row group，group大小以512MB为基础
+--每个row group作为数据发送缓冲块，迭代发送到Phi处理
+--Phi端可以设置两个缓冲区，交替接收数据，保证CPU端持续发送数据
+
+--或者CPU端对l_shipdate，l_quantity，l_extendedprice， l_discount，l_tax，l_returnflag，l_linestatus循环按row group扫描，生成一个row group block，将其后的过滤及分组聚集计算标记为offload to phi，聚集采用数组聚集。
+--l_returnflag：3，l_linestatus：2
+
+--supersonic:聚集计算时表扫描操作中，加大游标row值，将row聚集计算定向到协处理器
+select
+	l_returnflag,
+	l_linestatus,
+	sum(l_quantity) as sum_qty,
+	sum(l_extendedprice) as sum_base_price,
+	sum(l_extendedprice * (1 - l_discount)) as sum_disc_price,
+	sum(l_extendedprice * (1 - l_discount) * (1 + l_tax)) as sum_charge,
+	avg(l_quantity) as avg_qty,
+	avg(l_extendedprice) as avg_price,
+	avg(l_discount) as avg_disc,
+	count(*) as count_order
+from
+	lineitem
+where
+	l_shipdate <= '1998-09-01'
+group by
+	l_returnflag,
+	l_linestatus
+order by
+	l_returnflag,
+	l_linestatus;
+
+
+--Q3:
+--C表选择率：30142/150000=20%，C表只要一列c_custkey
+--O表选择率：727305/1500000=48%，O表3列，c_custkey，o_orderdate,o_shippriority
+--L表选择率：3241776/6001215=54%，L表3列，l_orderkey，l_extendedprice，l_discount
+--L表划分为row group，注意group末尾l_orderkey确保在一个group中
+--O表按L表row group的l_orderkey边界划分对应的row group
+--L表与O表row group是一对哈希连接分片
+--协处理器端merge join L表与O表分片，然后再与C哈希表过滤，满足条件的生成哈希分组聚集结果
+--注：各分片的分组聚集结果不相交，每个分片结果拼在一起即可
+
+select
+	l_orderkey,
+	sum(l_extendedprice * (1 - l_discount)) as revenue,
+	o_orderdate,
+	o_shippriority
+from
+	customer,
+	orders,
+	lineitem
+where
+	c_mktsegment = 'BUILDING'
+	and c_custkey = o_custkey
+	and l_orderkey = o_orderkey
+	and o_orderdate < '1995-03-15'
+	and l_shipdate > '1995-03-15'
+group by
+	l_orderkey,
+	o_orderdate,
+	o_shippriority
+order by
+	revenue desc,
+	o_orderdate;
+
+--Q12:
+--l_shipmode有7个成员
+--L表上选择率为30988/6001215=0.5%
+--CPU端执行L表上过滤条件，生成l_shipmode，l_orderkey row group；
+--O表与L表同步扫描，满足L表过滤条件的l_orderkey键作为O表同步扫描条件，根据L表row group边界值生成o_orderkey和o_orderpriority row groups
+--将L表和O表对应的row group传输到PHI聚集计算，各分片独立聚集计算，最后global merge出最终结果。
+
+select
+	l_shipmode,
+	sum(case
+		when o_orderpriority = '1-URGENT'
+			or o_orderpriority = '2-HIGH'
+			then 1
+		else 0
+	end) as high_line_count,
+	sum(case
+		when o_orderpriority <> '1-URGENT'
+			and o_orderpriority <> '2-HIGH'
+			then 1
+		else 0
+	end) as low_line_count
+from
+	orders,
+	lineitem
+where
+	o_orderkey = l_orderkey
+	and l_shipmode in ('MAIL', 'SHIP')
+	and l_commitdate < l_receiptdate
+	and l_shipdate < l_commitdate
+	and l_receiptdate >= '1994-01-01'
+	and l_receiptdate < '1995-01-01'
+group by
+	l_shipmode
+order by
+	l_shipmode;
+
+
+--Q14:
+--L表选择率：75983/6001215=1.2%，投影出l_partkey，l_extendedprice，l_discount 3个字段
+--P表行数：200000，p_type 25B，p_partkey 4B P子表大小5.5MB
+--L表并行过滤扫描，生成row group，传输到协处理器进行聚集计算
+select
+	100.00 * sum(case
+		when p_type like 'PROMO%'
+			then l_extendedprice * (1 - l_discount)
+		else 0
+	end) / sum(l_extendedprice * (1 - l_discount)) as promo_revenue
+from
+	lineitem,
+	part
+where
+	l_partkey = p_partkey
+	and l_shipdate >= '1995-09-01'
+	and l_shipdate < '1995-10-01';
+
+
+
+
+TPCH测试SQL
+Q1:
+select
+	l_returnflag,
+	l_linestatus,
+	sum(l_quantity) as sum_qty,
+	sum(l_extendedprice) as sum_base_price,
+	sum(l_extendedprice * (1 - l_discount)) as sum_disc_price,
+	sum(l_extendedprice * (1 - l_discount) * (1 + l_tax)) as sum_charge,
+	avg(l_quantity) as avg_qty,
+	avg(l_extendedprice) as avg_price,
+	avg(l_discount) as avg_disc,
+	count(*) as count_order
+from
+	lineitem
+where
+	l_shipdate <= date '1998-12-01' - interval '90' day (3)
+group by
+	l_returnflag,
+	l_linestatus
+order by
+	l_returnflag,
+	l_linestatus;
+
+
+Q3:
+select
+	l_orderkey,
+	sum(l_extendedprice * (1 - l_discount)) as revenue,
+	o_orderdate,
+	o_shippriority
+from
+	customer,
+	orders,
+	lineitem
+where
+	c_mktsegment = 'BUILDING'
+	and c_custkey = o_custkey
+	and l_orderkey = o_orderkey
+	and o_orderdate < date '1995-03-15'
+	and l_shipdate > date '1995-03-15'
+group by
+	l_orderkey,
+	o_orderdate,
+	o_shippriority
+order by
+	revenue desc,
+	o_orderdate;
+
+Q12:
+select
+	l_shipmode,
+	sum(case
+		when o_orderpriority = '1-URGENT'
+			or o_orderpriority = '2-HIGH'
+			then 1
+		else 0
+	end) as high_line_count,
+	sum(case
+		when o_orderpriority <> '1-URGENT'
+			and o_orderpriority <> '2-HIGH'
+			then 1
+		else 0
+	end) as low_line_count
+from
+	orders,
+	lineitem
+where
+	o_orderkey = l_orderkey
+	and l_shipmode in ('MAIL', 'SHIP')
+	and l_commitdate < l_receiptdate
+	and l_shipdate < l_commitdate
+	and l_receiptdate >= date '1994-01-01'
+	and l_receiptdate < date '1994-01-01' + interval '1' year
+group by
+	l_shipmode
+order by
+	l_shipmode;
+
+
+Q14:
+select
+	100.00 * sum(case
+		when p_type like 'PROMO%'
+			then l_extendedprice * (1 - l_discount)
+		else 0
+	end) / sum(l_extendedprice * (1 - l_discount)) as promo_revenue
+from
+	lineitem,
+	part
+where
+	l_partkey = p_partkey
+	and l_shipdate >= date '1995-09-01'
+	and l_shipdate < date '1995-09-01' + interval '1' month;
